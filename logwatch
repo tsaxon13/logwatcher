@@ -1,0 +1,48 @@
+#!/bin/bash
+LOGDIR=/path/to/log/files
+LOGEXT=".log"
+MAILLIST="email1@domain.com email2@domain.com email3@domain.com"
+export LOGDIR LOG
+
+# SET THESE BASED ON LOCAL ENVIRONMENT TO PREVENT PATH POISONING
+MUTT="/usr/bin/mutt"
+SED="/usr/bin/sed"
+DATE="/usr/bin/date"
+HEAD="/usr/bin/head"
+EGREP="/bin/egrep"
+CUT="/usr/bin/cut"
+CAT="/usr/bin/cat"
+WC="/usr/bin/wc"
+#################################################################
+
+
+curdate=`${DATE} -u "+%b %d %H:%M"`
+olddate=`${DATE} -u -d "5 minutes ago" "+%b %d %H:%M"`
+
+cd $LOGDIR 
+
+for LOG in `find . -name "*${LOGEXT}"`
+do
+  firstdate=`${HEAD} -1 ${LOGDIR}/${LOG} | ${CUT} -f1,2,3 -d' '`
+
+  #compare 6 minutes ago with first date from current log file
+  if [[ `${DATE} -d "${firstdate}" -u "+%s"` > `${DATE} -d "${olddate}" -u "+%s"` ]]
+  then 
+	  pastdate=${firstdate}
+  else
+	  pastdate=${olddate}
+  fi
+
+  DEVICE=`echo ${LOG} | cut -d/ -f2 | cut -d. -f1`
+  # egrep pattern here for what you are looking for
+  ERRORLINE=`${CAT} ${LOG} | ${SED} -n "/${pastdate}/,/${curdate}/p" | ${EGREP} "PRI.*unregistered|IO_ERROR|blah"`
+
+  ISERROR=`echo -e "${ERRORLINE}" | ${EGREP} -v ^$ | ${WC} -l`
+
+  if [[ $ISERROR -ge 1 ]] 
+  then
+    echo -e "Error found in logs. \n\nError Message: $ERRORLINE" | ${MUTT} -s "${DEVICE} - Alert" -- $MAILLIST
+  fi
+done
+
+exit
